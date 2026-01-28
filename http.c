@@ -2047,6 +2047,23 @@ uwsd_http_state_upstream_recv(uwsd_client_context_t *cl, uwsd_connection_state_t
 
 		chunked = (cl->http.state == STATE_HTTP_CHUNK_HEADER);
 
+		/* Remove hop-by-hop headers from cl->http_headers, with defensive checks and debug logging */
+		if (cl->http_headers) {
+			for (i = 0; i < cl->http_num_headers; ) {
+				hdr = &cl->http_headers[i];
+				if (http_is_hop_by_hop_header(hdr)) {
+					uwsd_http_debug(cl, "Removing hop-by-hop header: %s", hdr->name ? hdr->name : "(null)");
+					if (cl->http_num_headers > 1 && i < cl->http_num_headers - 1) {
+						memmove(&cl->http_headers[i], &cl->http_headers[i+1],
+							sizeof(uwsd_http_header_t) * (cl->http_num_headers - i - 1));
+					}
+					cl->http_num_headers--;
+					continue;
+				}
+				i++;
+			}
+		}
+
 		for (i = 0; i < cl->http_num_headers; i++) {
 			hdr = &cl->http_headers[i];
 
@@ -2058,9 +2075,6 @@ uwsd_http_state_upstream_recv(uwsd_client_context_t *cl, uwsd_connection_state_t
 			}
 
 			has_ctype |= !strcasecmp(hdr->name, "Content-Type");
-
-			if (http_is_hop_by_hop_header(hdr))
-				continue;
 
 			if (!strcasecmp(hdr->name, "Host"))
 				continue;
